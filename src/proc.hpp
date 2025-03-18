@@ -34,12 +34,31 @@
 
 #include <string>
 #include <vector>
-#include <unistd.h>   // For fork, pipe, dup2, execvp, close, read
-#include <sys/wait.h>  // For waitpid
-#include <cstring>    // For strerror
-#include <cerrno>     // For errno
-#include <stdexcept>  // For std::runtime_error
-#include <fcntl.h>    // For fcntl, O_NONBLOCK (optional non-blocking read)
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/wait.h> 
+#endif
+#include <cstring>    
+#include <cerrno>
+#include <stdexcept> 
+#include <fcntl.h>    
+
+#if _WIN32
+std::string ReadFromPipe(HANDLE hPipe) {
+  const int BUFFER_SIZE = 4096;
+  char buffer[BUFFER_SIZE];
+  DWORD bytesRead;
+  std::string output;
+
+  while (ReadFile(hPipe, buffer, BUFFER_SIZE - 1, &bytesRead, NULL) && bytesRead != 0) {
+      buffer[bytesRead] = '\0';
+      output += buffer;
+  }
+  return output;
+}
+#endif
 
 namespace vt {
  
@@ -65,10 +84,71 @@ struct Result {
 ** @throws std::runtime_error if there is an error during process execution (fork, pipe, execvp, read).
 */
 Result execute(const std::string& command, const std::vector<std::string>& args) {
+  int return_code = 0;
+  std::string stdout_buffer;
+  std::string stderr_buffer;
+#if _WIN32  
+  SECURITY_ATTRIBUTES saAttr;
+  HANDLE hRead, hWrite;
+
+  // Set the bInheritHandle flag on the security attributes structure.
+  saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  saAttr.bInheritHandle = TRUE;
+  saAttr.lpSecurityDescriptor = NULL;
+
+  // Create a pipe for the child process's STDOUT.
+  if (!CreatePipe(&hRead, &hWrite, &saAttr, 0)) {
+    fprintf(stderr, "StdoutRd CreatePipe failed.\n"); 
+  }
+
+  STARTUPINFOW si;
+  PROCESS_INFORMATION pi;
+
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(si);
+  si.hStdOutput = hWrite;
+  si.hStdError = hWrite;       // Redirect STDERR to the same pipe
+  si.dwFlags |= STARTF_USESTDHANDLES;
+
+  ZeroMemory(&pi, sizeof(pi));
+
+  // Use wide strings (Unicode)
+  wchar_t appName[] = L"C:\\Windows\\System32\\cmd.exe"; // Full path to cmd.exe
+  wchar_t commandLine[] = L"cmd.exe /c dir"; // Command to execute
+
+  // Start the child process.
+  if (!CreateProcessW(appName,     
+                      commandLine,  
+                      NULL,         
+                      NULL,         
+                      TRUE,         
+                      CREATE_NO_WINDOW,
+                      NULL,          
+                      NULL,         
+                      &si,
+                      &pi))
+  {
+    fprintf(stderr, "CreateProcess failed (%d).\n", GetLastError());
+  }
+
+  // Close the write end of the pipe (parent doesn't write to the pipe).
+  CloseHandle(hWrite);
+
+  // Read output from the child process
+  std::string output = ReadFromPipe(hRead);
+  printf("Child process output:\n%s\n", output.c_str());
+
+  // Wait until child process exits.
+  WaitForSingleObject(pi.hProcess, INFINITE);
+
+  // Close process and thread handles.
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+  CloseHandle(hRead); // Close the read handle
+#else
+  pid_t pid;
   int stdout_pipe[2]; // stdout_pipe[0] for reading, stdout_pipe[1] for writing
   int stderr_pipe[2]; // stderr_pipe[0] for reading, stderr_pipe[1] for writing
-  pid_t pid;
-
   if (pipe(stdout_pipe) == -1) {
     throw std::runtime_error("pipe() failed for stdout: " + std::string(strerror(errno)));
   }
@@ -124,8 +204,6 @@ Result execute(const std::string& command, const std::vector<std::string>& args)
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
 
-    std::string stdout_buffer;
-    std::string stderr_buffer;
     char buffer[256]; // Buffer for reading from pipes
     ssize_t bytes_read;
 
@@ -161,20 +239,18 @@ Result execute(const std::string& command, const std::vector<std::string>& args)
     int status;
     waitpid(pid, &status, 0); // Wait for child process to exit
 
-    int return_code = 0;
     if (WIFEXITED(status)) { // Check if child process exited normally
       return_code = WEXITSTATUS(status); // Get exit status
     } else {
       // Process terminated by signal or other abnormal exit
       return_code = -1; // Indicate abnormal termination, or use a different value/mechanism to signal signal number etc.
     }
-
+#endif
     return {return_code, stdout_buffer, stderr_buffer};
   }
-}
 
-};
+}; // namespace proc
 
-};
+}; // namespace vt
 
 #endif // _PROCESS_EXECUTOR_HPP_

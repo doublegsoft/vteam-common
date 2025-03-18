@@ -9,6 +9,10 @@ if(APPLE) # Check if it's any Apple platform (macOS, iOS, etc.)
     set(PLATFORM "darwin")
   endif()
 endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
+  set(PLATFORM "mingw64")
+endif()
+
 
 include_directories(
   "../vteam-3rd/cpp-httplib"
@@ -28,14 +32,21 @@ add_executable(test_proc_ls
   "test/test_proc_ls.cpp"
 )
 
+message(WARNING ${CMAKE_SYSTEM_NAME})
 add_executable(test_http_post
   "test/test_http_post.cpp"
 )
-target_link_libraries(test_http_post PRIVATE
+target_link_libraries(test_http_post  
   ssl 
   crypto 
   pthread
 )
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
+  target_link_libraries(test_http_post  
+    ws2_32
+    crypt32
+  )
+endif()
 
 add_executable(test_ini_parse
   "test/test_ini_parse.cpp"

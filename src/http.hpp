@@ -48,17 +48,14 @@ namespace http {
 
 static std::string host;  
 
-int post(const std::string& uri, const json& payload, std::string& content) {
+int post(const std::string& uri, const json& payload, std::string& response) {
   
   httplib::Client cli(host);
 
-  auto res = cli.Post(uri, "{ \
-  \"contents\": [{ \
-    \"parts\":[{\"text\": \"objc set navigation bar dark mode\"}] \
-    }] \
-   }", "application/json");
+  std::string str = payload.dump();
+  auto res = cli.Post(uri, str, "application/json");
   if (res->status == 200) {
-    content = res->body;
+    response = res->body;
     return 0;
   } else {
     return res->status;
@@ -69,6 +66,6 @@ void get(const std::string& url) {
 
 }
 
-};
+}; // namespace http
 
-};
+}; // namespace vt
