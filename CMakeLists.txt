@@ -1,3 +1,10 @@
+#              mm                                      
+#              MM                                      
+# `7M'   `MF'mmMMmm .gP"Ya   ,6"Yb.  `7MMpMMMb.pMMMb.  
+#   VA   ,V    MM  ,M'   Yb 8)   MM    MM    MM    MM  
+#    VA ,V     MM  8M""""""  ,pm9MM    MM    MM    MM  
+#     VVV      MM  YM.    , 8M   MM    MM    MM    MM  
+#      W       `Mbmo`Mbmmd' `Moo9^Yo..JMML  JMML  JMML.
 cmake_minimum_required(VERSION 3.13) 
 
 project(vteam-common)
@@ -11,6 +18,9 @@ if(APPLE) # Check if it's any Apple platform (macOS, iOS, etc.)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
   set(PLATFORM "mingw64")
+endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  set(PLATFORM "msvc")
 endif()
 
 
@@ -32,15 +42,22 @@ add_executable(test_proc_ls
   "test/test_proc_ls.cpp"
 )
 
-message(WARNING ${CMAKE_SYSTEM_NAME})
 add_executable(test_http_post
   "test/test_http_post.cpp"
 )
-target_link_libraries(test_http_post  
-  ssl 
-  crypto 
-  pthread
-)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  target_link_libraries(test_http_post  
+    libssl 
+    libcrypto 
+  )
+else()
+  target_link_libraries(test_http_post  
+    ssl 
+    crypto 
+    pthread
+  )
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR CMAKE_SYSTEM_NAME STREQUAL "MSYS")
   target_link_libraries(test_http_post  
     ws2_32

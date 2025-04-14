@@ -26,3 +26,12 @@ mingw64 build
 
 mingw32-make
 ```
+
+mingw64 build
+
+```bash
+
+perl Configure VC-WIN64A
+
+nmake
+```
